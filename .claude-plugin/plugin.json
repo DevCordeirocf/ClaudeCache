@@ -1,0 +1,18 @@
+{
+  "name": "session-stats",
+  "version": "0.1.0",
+  "description": "Monitor do cache da sessão no Claude Code: indicador visual, contexto, tokens, alertas de expiração e proteção contra perda de cache ao trocar de modelo.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "luis.chaves"
+  },
+  "userConfig": {
+    "cacheTtl": {
+      "type": "string",
+      "title": "TTL do cache",
+      "description": "Quanto tempo o prompt cache fica quente após a última resposta.",
+      "options": ["1h", "5m"],
+      "default": "1h"
+    }
+  }
+}
