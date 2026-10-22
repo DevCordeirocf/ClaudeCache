@@ -91,11 +91,6 @@ export function footerLabel(state: {
   return parts.join(' · ')
 }
 
-function minutes(ms: number): string {
-  const m = Math.floor(ms / MINUTE)
-  return m < 1 ? 'menos de 1 min' : `${m} min`
-}
-
 /**
  * The line pinned under the prompt: whether the prompt cache still holds this
  * conversation, how long it will, and what that means for the next prompt.
@@ -118,7 +113,7 @@ export function cacheStatusLine(
   const left = lastTurn.endedAt + ttlMs - now
 
   if (left <= 0) {
-    return `❄ Cache frio há ${minutes(-left)}: o próximo prompt reenvia ${ctx} sem reaproveitar (mais lento e mais caro de processar) · ${ttl}${hit}`
+    return `❄ Cache frio: o próximo prompt reenvia ${ctx} sem reaproveitar (mais lento e mais caro de processar) · ${ttl}${hit}`
   }
   if (left <= 5 * MINUTE) {
     return `⏳ Cache expira em ${formatLeft(left)}: mande o próximo prompt antes disso para reaproveitar ${ctx} · ${ttl}${hit}`
@@ -142,7 +137,7 @@ export function footerCacheLine(
   const hit = lastTurn.hitPercent === null ? '' : ` · ${lastTurn.hitPercent}% reaproveitado`
   const left = lastTurn.endedAt + ttlMs - now
   if (left <= 0) {
-    return `❄ cache frio há ${minutes(-left)} · próximo prompt reprocessa ${tokens} · ${ctx}`
+    return `❄ cache frio · próximo prompt reprocessa ${tokens} · ${ctx}`
   }
   if (left <= 5 * MINUTE) {
     return `⏳ cache expira em ${formatLeft(left)} · envie antes p/ reaproveitar ${tokens}${hit} · ${ctx}`
@@ -150,14 +145,14 @@ export function footerCacheLine(
   return `🔥 cache quente ${formatLeft(left)}${hit} · ${ctx}`
 }
 
-export type CacheState = 'none' | 'warm' | 'expiring' | 'cold'
+export type CacheState = 'none' | 'busy' | 'warm' | 'expiring' | 'cold'
 
 export type CacheBadge = {
   state: CacheState
   /** A circle filled by the share of the TTL still left. */
   glyph: string
   color: string
-  /** Short text beside the circle: time left, or how long it has been cold. */
+  /** Short text beside the circle: time left, "frio", or empty while Claude answers. */
   text: string
 }
 
@@ -165,6 +160,7 @@ const GLYPHS = ['◯', '◔', '◑', '◕', '⬤'] as const
 
 export const CACHE_COLORS: Record<CacheState, string> = {
   none: '#9CA3AF',
+  busy: '#FACC15',
   warm: '#F97316',
   expiring: '#F59E0B',
   cold: '#60A5FA',
@@ -177,12 +173,15 @@ export function cacheState(lastTurn: LastTurn | null, ttlMs: number, now: number
   return left <= 5 * MINUTE ? 'expiring' : 'warm'
 }
 
+/** While Claude is still answering, the cache is being written: no countdown yet, just the yellow ball. */
+export const BUSY_BADGE: CacheBadge = { state: 'busy', glyph: '⬤', color: CACHE_COLORS.busy, text: '' }
+
 export function cacheBadge(lastTurn: LastTurn | null, ttlMs: number, now: number): CacheBadge {
   const state = cacheState(lastTurn, ttlMs, now)
   const color = CACHE_COLORS[state]
   if (lastTurn === null) return { state, glyph: '◯', color, text: 'cache' }
   const left = lastTurn.endedAt + ttlMs - now
-  if (left <= 0) return { state, glyph: '◯', color, text: `frio ${Math.floor(-left / MINUTE)}m` }
+  if (left <= 0) return { state, glyph: '◯', color, text: 'frio' }
   const step = Math.min(4, Math.max(1, Math.ceil((left / ttlMs) * 4)))
   return { state, glyph: GLYPHS[step] ?? '⬤', color, text: formatLeft(left) }
 }

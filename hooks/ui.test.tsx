@@ -35,3 +35,21 @@ test('clicar no tempo do círculo abre o cartão acima do prompt', async $ => {
   await band.unmount()
   await footer.unmount()
 })
+
+test('enquanto Claude responde, o rodapé mostra só a bola amarela', async ($, on) => {
+  // The engine beneath: a turn's start echoes its id, its end the answer.
+  on('turn.start', async (_, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async (_, e) => ({ text: e.answer }))
+  const FOOTER = { plugin: 'session-stats', surface: 'desktop', component: 'SessionMode', props: { modes: [] } } as const
+
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  const busy = await $.ui.mount(FOOTER)
+  expect(await busy.find({ type: 'Text', text: '⬤' })).toBeDefined()
+  expect(await busy.find({ key: 'cache-badge' })).toBeUndefined()
+  await busy.unmount()
+
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  const after = await $.ui.mount(FOOTER)
+  expect(await after.find({ key: 'cache-badge' })).toBeDefined()
+  await after.unmount()
+})
