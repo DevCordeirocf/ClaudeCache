@@ -53,3 +53,24 @@ test('enquanto Claude responde, o rodapé mostra só a bola amarela', async ($, 
   expect(await after.find({ key: 'cache-badge' })).toBeDefined()
   await after.unmount()
 })
+
+test('a bola amarela acende já no envio do prompt', async ($, on) => {
+  on('prompt.submit', async (_, e) => ({ text: e.text }))
+  const FOOTER = { plugin: 'session-stats', surface: 'desktop', component: 'SessionMode', props: { modes: [] } } as const
+
+  await $.prompt.submit({ text: 'oi' })
+  const busy = await $.ui.mount(FOOTER)
+  expect(await busy.find({ type: 'Text', text: '⬤' })).toBeDefined()
+  expect(await busy.find({ key: 'cache-badge' })).toBeUndefined()
+  await busy.unmount()
+})
+
+test('um subagente rodando não acende a bola amarela', async ($, on) => {
+  on('turn.start', async (_, e) => ({ turnId: e.turnId }))
+  const FOOTER = { plugin: 'session-stats', surface: 'desktop', component: 'SessionMode', props: { modes: [] } } as const
+
+  await $.turn.start({ text: 'tarefa', turnId: 'a1-t1', agentId: 'a1' })
+  const footer = await $.ui.mount(FOOTER)
+  expect(await footer.find({ key: 'cache-badge' })).toBeDefined()
+  await footer.unmount()
+})

@@ -147,6 +147,11 @@ export const register: Register = (on, options) => {
     $.clock.every(TICK_MS, () => {
       void (async () => {
         const t = await $.clock.now()
+        // Once the cache is cold nothing on screen changes: the clock stops
+        // moving the footer, so it shows "frio" and no time.
+        const turn = await read($, lastTurn)
+        const left = cacheLeftMs(turn, await effectiveTtl($, configuredTtl), await read($, now))
+        if (left === 0 && !(await read($, isAnswering))) return
         await update($, now, () => t)
         await checkWarnings($, configuredTtl)
       })()
@@ -165,9 +170,20 @@ export const register: Register = (on, options) => {
 
   // From the moment a prompt goes out until the answer ends, the cache is being
   // written: the footer shows just the yellow ball, and the countdown starts after.
-  // Only the main loop raises turn.start; a subagent's run does not.
+  // The ball turns on at the submit itself: turn.start comes only after the
+  // UserPromptSubmit settings hooks ran, which can take seconds.
+  on('prompt.submit', async ($, e, next) => {
+    const startsTurn = e.turnId === undefined && e.command === undefined && e.isMeta === undefined
+    if (startsTurn) await update($, isAnswering, () => true)
+    const result = await next(e)
+    if (startsTurn && result.drop !== undefined) await update($, isAnswering, () => false)
+    return result
+  })
+
+  // Turns the submit does not announce (a skill, a queued prompt); main loop only,
+  // since a subagent's run, even one left in the background, is not Claude answering.
   on('turn.start', async ($, e, next) => {
-    await update($, isAnswering, () => true)
+    if (e.agentId === undefined) await update($, isAnswering, () => true)
     return next(e)
   })
 
