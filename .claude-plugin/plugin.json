@@ -1,6 +1,6 @@
 {
   "name": "session-stats",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Monitor do cache da sessão no Claude Code: indicador visual, contexto, tokens, alertas de expiração e proteção contra perda de cache ao trocar de modelo.",
   "types": "./types/index.d.ts",
   "author": {

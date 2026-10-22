@@ -24,10 +24,10 @@ Além disso, o plugin oferece:
 
 No rodapé do prompt, o mod mostra um círculo com preenchimento proporcional ao tempo restante do TTL e um texto com o tempo restante ou o estado atual do cache.
 
-- respondendo: uma bola amarela enquanto o Claude ainda responde; a contagem começa quando a resposta termina
+- respondendo: uma bola amarela desde o envio do prompt até o Claude terminar; a contagem começa quando a resposta termina (subagentes em segundo plano não contam)
 - quente: indica que o cache ainda está válido
 - expirando: avisa que o cache está prestes a expirar
-- frio: indica que o cache já foi invalidado (mostra só "frio", sem contar o tempo)
+- frio: indica que o cache já foi invalidado (mostra só "frio"; o relógio para até a próxima resposta)
 
 ### Cartão detalhado da sessão
 
@@ -61,11 +61,18 @@ O comando `/sessao` abre um relatório detalhado com:
 No terminal do Claude Code:
 
 ```bash
-/plugin marketplace add DevCordeirocf/my-mods
-/plugin install session-stats@my-mods
+/plugin marketplace add DevCordeirocf/ClaudeCache
+/plugin install session-stats@claude-cache
 ```
 
 > O primeiro comando adiciona o marketplace uma vez; o segundo instala o mod no escopo desejado (usuário ou projeto).
+
+Para receber uma versão nova, atualize o marketplace e o mod, e reinicie a sessão:
+
+```bash
+/plugin marketplace update claude-cache
+/plugin update session-stats@claude-cache
+```
 
 ## Como usar
 
