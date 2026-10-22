@@ -3,11 +3,13 @@ import type { EngineInterface, Register, SessionContextUsage } from 'claude-code
 
 import type { Context } from '../types'
 import {
+  BUSY_BADGE,
   EMPTY_TOTALS,
   addUsage,
   cacheBadge,
   cacheLeftMs,
   compact,
+  contextLabel,
   contextLevel,
   contextShare,
   footerCacheLine,
@@ -31,6 +33,7 @@ const isCardOpen = atom({ plugin: 'session-stats', key: 'isCardOpen' } as const,
 const warnedFor = atom({ plugin: 'session-stats', key: 'warnedFor' } as const, 0)
 const compactAt = atom({ plugin: 'session-stats', key: 'compactAt' } as const, null)
 const contextWarned = atom({ plugin: 'session-stats', key: 'contextWarned' } as const, 0)
+const isAnswering = atom({ plugin: 'session-stats', key: 'isAnswering' } as const, false)
 
 const TICK_MS = 15_000
 // The side pane of earlier versions; closed on load, the card replaced it.
@@ -93,7 +96,8 @@ async function checkWarnings($: EngineInterface, configuredTtl: number): Promise
   const turn = await read($, lastTurn)
   const ctx = await read($, context)
 
-  if (shouldWarnExpiry(turn, await effectiveTtl($, configuredTtl), t, await read($, warnedFor)) && turn !== null) {
+  const answering = await read($, isAnswering)
+  if (!answering && shouldWarnExpiry(turn, await effectiveTtl($, configuredTtl), t, await read($, warnedFor)) && turn !== null) {
     await update($, warnedFor, () => turn.endedAt)
     const tokens = ctx?.tokens == null ? 'o contexto' : `${compact(ctx.tokens)} tokens`
     const text = `O cache expira em 5 min. Mande o próximo prompt antes para reaproveitar ${tokens}.`
@@ -124,6 +128,7 @@ export const register: Register = (on, options) => {
     await update($, ttl, held => (held > 0 && held <= configuredTtl ? held : configuredTtl))
     const startedNow = await $.clock.now()
     await update($, now, () => startedNow)
+    await update($, isAnswering, () => false)
     await refreshCompactAt($)
 
     await $.command.register({
@@ -158,8 +163,17 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // From the moment a prompt goes out until the answer ends, the cache is being
+  // written: the footer shows just the yellow ball, and the countdown starts after.
+  // Only the main loop raises turn.start; a subagent's run does not.
+  on('turn.start', async ($, e, next) => {
+    await update($, isAnswering, () => true)
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    if (e.agentId === undefined) await update($, isAnswering, () => false)
     const usage = e.usage
     if (usage === undefined) return result
 
@@ -198,6 +212,7 @@ export const register: Register = (on, options) => {
       await update($, context, () => null)
       await update($, ttl, () => configuredTtl)
       await update($, contextWarned, () => 0)
+      await update($, isAnswering, () => false)
     }
     return next(e)
   })
@@ -205,7 +220,10 @@ export const register: Register = (on, options) => {
   // The terminal's hint line, under the prompt: the cache's state and the context.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
-    const line = footerCacheLine(
+    const ctxLine = contextLabel(await read($, context))
+    const line = (await read($, isAnswering))
+      ? `${BUSY_BADGE.glyph} cache: aguardando o fim da resposta · ${ctxLine}`
+      : footerCacheLine(
       await read($, lastTurn),
       await effectiveTtl($, configuredTtl),
       await read($, now),
@@ -220,7 +238,8 @@ export const register: Register = (on, options) => {
     const ttlMs = await effectiveTtl($, configuredTtl)
     const turn = await read($, lastTurn)
     const ctx = await read($, context)
-    const badge = cacheBadge(turn, ttlMs, await read($, now))
+    const answering = await read($, isAnswering)
+    const badge = answering ? BUSY_BADGE : cacheBadge(turn, ttlMs, await read($, now))
     const threshold = await read($, compactAt)
     const level = contextLevel(ctx?.tokens ?? null, threshold)
     const share = contextShare(ctx?.tokens ?? null, threshold)
@@ -230,23 +249,26 @@ export const register: Register = (on, options) => {
       const warning = level > 0 ? ` · ⚠ ${share}% do auto-compact` : ''
       return next({
         ...e,
-        props: { ...e.props, modes: [...e.props.modes, `${badge.glyph} ${badge.text} · ${label}${warning}`] },
+        props: { ...e.props, modes: [...e.props.modes, `${[badge.glyph, badge.text].filter(Boolean).join(' ')} · ${label}${warning}`] },
       })
     }
 
     // The desktop footer draws no Svg, so the circle is a glyph, kept outside
     // the Button, whose native chrome drops the color of what it holds.
     const heat = warmth(turn, ttlMs, await read($, now))
+    const color = answering ? BUSY_BADGE.color : heatColor(heat)
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="row" alignItems="center" gap={1}>
         {e.props.modes.length > 0 && <Text dimColor>{e.props.modes.join(' & ')}</Text>}
-        <Text key="cache-ring" color={heatColor(heat)} bold>
+        <Text key="cache-ring" color={color} bold>
           {badge.glyph}
         </Text>
-        <Button key="cache-badge" plain onPress={() => update($, isCardOpen, open => !open)}>
-          <Text color={heatColor(heat)}>{badge.text}</Text>
-        </Button>
+        {!answering && (
+          <Button key="cache-badge" plain onPress={() => update($, isCardOpen, open => !open)}>
+            <Text color={color}>{badge.text}</Text>
+          </Button>
+        )}
         {level > 0 && (
           <Text key="context-warning" color={WARNING_COLORS[level]}>
             ⚠ ctx {share}%
@@ -270,19 +292,22 @@ export const register: Register = (on, options) => {
     const threshold = await read($, compactAt)
     const level = contextLevel(ctx?.tokens ?? null, threshold)
     const share = contextShare(ctx?.tokens ?? null, threshold)
+    const answering = await read($, isAnswering)
     const heat = warmth(turn, ttlMs, t)
-    const color = heatColor(heat)
+    const color = answering ? BUSY_BADGE.color : heatColor(heat)
     const left = cacheLeftMs(turn, ttlMs, t)
     const ctxTokens = ctx?.tokens == null ? 'o contexto' : `${compact(ctx.tokens)} tokens`
 
-    const headline =
-      left === null
+    const headline = answering
+      ? 'Claude respondendo · o cache é gravado agora'
+      : left === null
         ? 'Cache: aguardando a primeira resposta'
         : left > 0
           ? `Cache quente · expira em ${formatLeft(left)}`
-          : `Cache frio há ${Math.floor(-left / 60_000)} min`
-    const meaning =
-      left === null
+          : 'Cache frio'
+    const meaning = answering
+      ? 'A contagem do cache quente começa quando a resposta terminar.'
+      : left === null
         ? 'Depois da primeira resposta o mod mede o cache desta sessão.'
         : left > 5 * 60_000
           ? `O próximo prompt reaproveita ${ctxTokens}: resposta mais rápida e leitura ~10x mais barata.`
@@ -294,7 +319,7 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" alignItems="center" gap={1}>
           <Text key="card-ring" color={color} bold>
-            {cacheBadge(turn, ttlMs, t).glyph}
+            {(answering ? BUSY_BADGE : cacheBadge(turn, ttlMs, t)).glyph}
           </Text>
           <Text bold color={color}>
             {headline}
@@ -383,7 +408,7 @@ export const register: Register = (on, options) => {
       lines.push(`  🔥 quente, expira em ${formatLeft(left)}`)
       lines.push(`  o próximo prompt reaproveita ${ctxText} do cache`)
     } else {
-      lines.push(`  ❄ frio há ${Math.floor(-left / 60_000)} min`)
+      lines.push('  ❄ frio')
       lines.push(`  o próximo prompt reenvia ${ctxText} e grava tudo de novo no cache`)
     }
     if (turn?.hitPercent != null) lines.push(`  último turno: ${turn.hitPercent}% da entrada veio do cache`)

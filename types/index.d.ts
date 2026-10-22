@@ -32,6 +32,8 @@ declare module 'claude-code' {
       compactAt: number | null
       /** The last context warning level announced: 0, 80 or 90. */
       contextWarned: number
+      /** True from a main turn's start until it ends: Claude is still answering. */
+      isAnswering: boolean
     }
   }
 }

@@ -24,9 +24,10 @@ Além disso, o plugin oferece:
 
 No rodapé do prompt, o mod mostra um círculo com preenchimento proporcional ao tempo restante do TTL e um texto com o tempo restante ou o estado atual do cache.
 
+- respondendo: uma bola amarela enquanto o Claude ainda responde; a contagem começa quando a resposta termina
 - quente: indica que o cache ainda está válido
 - expirando: avisa que o cache está prestes a expirar
-- frio: indica que o cache já foi invalidado
+- frio: indica que o cache já foi invalidado (mostra só "frio", sem contar o tempo)
 
 ### Cartão detalhado da sessão
 

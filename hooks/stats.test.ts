@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import {
+  BUSY_BADGE,
   EMPTY_TOTALS,
   MINUTE,
   SHORT_TTL_MS,
@@ -89,9 +90,9 @@ describe('linha do cache embaixo do prompt', () => {
     )
   })
 
-  test('frio diz há quanto tempo e o que custa', () => {
+  test('frio diz o que custa, sem contar o tempo', () => {
     expect(cacheStatusLine(turn, 60 * MINUTE, 72 * MINUTE, 139_000)).toMatch(
-      /^❄ Cache frio há 12 min: o próximo prompt reenvia 139k tokens de contexto/,
+      /^❄ Cache frio: o próximo prompt reenvia 139k tokens de contexto/,
     )
   })
 
@@ -137,7 +138,7 @@ describe('linha ao lado do modelo', () => {
 
   test('frio', () => {
     expect(footerCacheLine(turn, 60 * MINUTE, 72 * MINUTE, ctx)).toBe(
-      '❄ cache frio há 12 min · próximo prompt reprocessa 156k · ctx 156k/1M 16%',
+      '❄ cache frio · próximo prompt reprocessa 156k · ctx 156k/1M 16%',
     )
   })
 
@@ -164,8 +165,14 @@ describe('círculo do cache', () => {
   test('âmbar perto de expirar, azul quando frio', () => {
     expect(cacheBadge(turn, 60 * MINUTE, 56 * MINUTE + 20_000)).toMatchObject({ state: 'expiring', text: '3:40' })
     expect(cacheBadge(turn, 60 * MINUTE, 72 * MINUTE)).toEqual({
-      state: 'cold', glyph: '◯', color: CACHE_COLORS.cold, text: 'frio 12m',
+      state: 'cold', glyph: '◯', color: CACHE_COLORS.cold, text: 'frio',
     })
+    // Hours later it still just says "frio": no endless count.
+    expect(cacheBadge(turn, 60 * MINUTE, 600 * MINUTE).text).toBe('frio')
+  })
+
+  test('enquanto Claude responde, só a bola amarela', () => {
+    expect(BUSY_BADGE).toEqual({ state: 'busy', glyph: '⬤', color: CACHE_COLORS.busy, text: '' })
   })
 
   test('cinza antes da primeira resposta', () => {
