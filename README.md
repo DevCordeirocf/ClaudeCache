@@ -61,8 +61,8 @@ O comando `/sessao` abre um relatório detalhado com:
 No terminal do Claude Code:
 
 ```bash
-/plugin marketplace add DevCordeirocf/my-mods
-/plugin install session-stats@my-mods
+/plugin marketplace add DevCordeirocf/ClaudeCache
+/plugin install session-stats@claude-cache
 ```
 
 > O primeiro comando adiciona o marketplace uma vez; o segundo instala o mod no escopo desejado (usuário ou projeto).
